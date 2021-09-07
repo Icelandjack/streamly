@@ -110,6 +110,8 @@ watch = Event.watch
 #elif defined(CABAL_OS_LINUX)
 watch = Event.watchWithFlags
     [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+#elif defined(CABAL_OS_DARWIN)
+watch = Event.watch
 #endif
 
 -- | Like 'watch' except that if a watched path is a directory the whole
@@ -125,6 +127,8 @@ watchRecursive = Event.watchRecursive
 #elif defined(CABAL_OS_LINUX)
 watchRecursive = Event.watchRecursiveWithFlags
     [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+#elif defined(CABAL_OS_DARWIN)
+watchRecursive = Event.watchRecursive
 #endif
 
 -------------------------------------------------------------------------------
