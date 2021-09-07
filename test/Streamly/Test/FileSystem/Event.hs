@@ -33,6 +33,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Streamly.Internal.Data.Array.Foreign (Array)
 
 import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 import qualified Streamly.Unicode.Stream as Unicode
 import qualified Streamly.Internal.Data.Array.Foreign as Array
@@ -40,6 +41,7 @@ import qualified Streamly.Internal.Data.Fold as FL
 import qualified Streamly.Internal.Data.Parser as PR
 import qualified Streamly.Internal.Data.Stream.IsStream as S
 import qualified Streamly.Internal.Unicode.Stream as U
+import qualified Streamly.Internal.FileSystem.Event as CommonEvent
 #if defined(CABAL_OS_DARWIN)
 import qualified Streamly.Internal.FileSystem.Event.Darwin as Event
 #elif defined(CABAL_OS_LINUX)
@@ -126,14 +128,17 @@ showEventShort ev@Event.Event{..} =
 -- Event Watcher
 -------------------------------------------------------------------------------
 
-checkEvents :: FilePath -> MVar () -> [String] -> IO String
-checkEvents rootPath m matchList = do
+type EventChecker = FilePath -> MVar () -> [String] -> IO String
+type EventWatch = NonEmpty (Array Word8) -> S.SerialT IO Event.Event
+
+checkEvents :: EventWatch -> EventChecker 
+checkEvents ew rootPath m matchList = do
     let args = [rootPath]
     paths <- mapM toUtf8 args
     putStrLn ("Watch started !!!! on Path " ++ rootPath)
     events <- S.parse (PR.takeWhile eventPredicate FL.toList)
-        $ S.before (putMVar m ())
-        $ Event.watchTrees (NonEmpty.fromList paths)
+        $ S.before (putMVar m ())        
+        $ ew (NonEmpty.fromList paths)
     let eventStr =  map showEventShort events
     let baseSet = Set.fromList matchList
         resultSet = Set.fromList eventStr
@@ -144,15 +149,15 @@ checkEvents rootPath m matchList = do
         putStrLn $ "baseSet " ++ show matchList
         putStrLn $ "resultSet " ++ show eventStr
         return "Mismatch"
-
+        
 -------------------------------------------------------------------------------
 -- FS Event Generators
 -------------------------------------------------------------------------------
 
 checker :: S.IsStream t =>
-                FilePath -> MVar () -> [String] -> t IO String
-checker rootPath synch matchList =
-    S.fromEffect (checkEvents rootPath synch matchList)
+      EventChecker -> FilePath -> MVar () -> [String] -> t IO String
+checker ec rootPath synch matchList =
+    S.fromEffect (ec rootPath synch matchList)
     `S.parallelFst`
     S.fromEffect timeout
 
@@ -161,13 +166,14 @@ checker rootPath synch matchList =
 -------------------------------------------------------------------------------
 
 driver ::
-       ( String
+       EventChecker
+    -> ( String
        , FilePath -> IO ()
        , FilePath -> IO ()
        , [String]
        )
     -> SpecWith ()
-driver (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
+driver ec (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
 
     where
 
@@ -175,7 +181,7 @@ driver (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
         sync <- newEmptyMVar
         withSystemTempDirectory fseventDir $ \fp -> do
             pre fp
-            let eventStream = checker fp sync events
+            let eventStream = checker ec fp sync events
                 fsOps = S.fromEffect $ runFSOps fp sync
             fmap fromJust $ S.head $ eventStream `S.parallelFst` fsOps
 
@@ -183,8 +189,9 @@ driver (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
         _ <- takeMVar sync
         threadDelay 200000
         ops fp
+        -- 'EOTask Created dir' event gets out of order so need to wait here
         threadDelay 200000 -- Why this delay?
-        createDirectoryIfMissing True (fp </> "EOTask")
+        createDirectoryIfMissing True (fp </> eoTask)
         threadDelay 10000000
         error "fs ops timed out"
 
@@ -206,11 +213,7 @@ testDesc =
 #if defined(CABAL_OS_WINDOWS)
       , [ "dir1Single_1" ]
 #elif defined(CABAL_OS_LINUX)
-      , [ "dir1Single_1073742080_Dir"
-        , "dir1Single_1073741856_Dir"
-        , "dir1Single_1073741825_Dir"
-        , "dir1Single_1073741840_Dir"
-        ]
+      , ["dir1Single_1073742080_Dir"]
 #endif
       )
     , ( "Remove a single directory"
@@ -219,8 +222,8 @@ testDesc =
 #if defined(CABAL_OS_WINDOWS)
       , [ "dir1Single_2" ]
 #elif defined(CABAL_OS_LINUX)
-      , [ "dir1Single_1024"
-        , "dir1Single_32768"
+      , [
+        "dir1Single_1073742336_Dir"
         ]
 #endif
       )
@@ -251,9 +254,6 @@ testDesc =
         ]
 #elif defined(CABAL_OS_LINUX)
       , [ "dir1_1073742080_Dir"
-        , "dir1_1073741856_Dir"
-        , "dir1_1073741825_Dir"
-        , "dir1_1073741840_Dir"
         ]
 #endif
       )
@@ -303,7 +303,6 @@ testDesc =
         ]
 #elif defined(CABAL_OS_LINUX)
       , [ "FileCreated.txt_256"
-        , "FileCreated.txt_32"
         , "FileCreated.txt_2"
         ]
 #endif
@@ -345,9 +344,7 @@ testDesc =
         ]
 #elif defined(CABAL_OS_LINUX)
       , [ "dir1/dir2/dir3/FileCreated.txt_256"
-        , "dir1/dir2/dir3/FileCreated.txt_32"
         , "dir1/dir2/dir3/FileCreated.txt_2"
-        , "dir1/dir2/dir3/FileCreated.txt_8"
         ]
 #endif
       )
@@ -397,4 +394,5 @@ moduleName = "FileSystem.Event"
 main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
-    hspec $ describe moduleName $ mapM_ driver testDesc
+    hspec $ describe moduleName $ mapM_ (driver $ checkEvents Event.watchRecursive) testDesc
+    hspec $ describe moduleName $ mapM_ (driver $ checkEvents CommonEvent.watchRecursive) testDesc

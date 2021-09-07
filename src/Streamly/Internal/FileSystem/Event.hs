@@ -104,8 +104,13 @@ import qualified Streamly.Internal.FileSystem.Event.Windows as Event
 --
 -- /Pre-release/
 --
-watch :: NonEmpty (Array Word8) -> SerialT IO Event.Event
+watch :: NonEmpty (Array Word8) -> SerialT IO Event
+#if defined(CABAL_OS_WINDOWS)
 watch = Event.watch
+#elif defined(CABAL_OS_LINUX)
+watch = Event.watchWithFlags
+    [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+#endif
 
 -- | Like 'watch' except that if a watched path is a directory the whole
 -- directory tree under it is watched recursively.
@@ -115,7 +120,12 @@ watch = Event.watch
 -- /Pre-release/
 --
 watchRecursive :: NonEmpty (Array Word8) -> SerialT IO Event
+#if defined(CABAL_OS_WINDOWS)
 watchRecursive = Event.watchRecursive
+#elif defined(CABAL_OS_LINUX)
+watchRecursive = Event.watchRecursiveWithFlags
+    [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+#endif
 
 -------------------------------------------------------------------------------
 -- Handling Events
@@ -134,7 +144,8 @@ getAbsPath = Event.getAbsPath
 -- | Determine whether the event indicates creation of an object within the
 -- monitored path. This event is generated when any file system object other
 -- than a hard link is created.
---
+-- Hard link behaviours:
+-- On Linux and Windows hard lnik creation generates 'Created' event.
 -- /Pre-release/
 --
 isCreated :: Event -> Bool
@@ -143,8 +154,9 @@ isCreated = Event.isCreated
 -- XXX Test and document the hard link deletion on each platform.
 --
 -- | Determine whether the event indicates deletion of an object within the
--- monitored path. This is true when a file or a hardlink is deleted.
---
+-- monitored path. This is true when a file or a hardlink is deleted.--
+-- Hard link behaviours:
+-- On Linux and Windows hard lnik deletion generates 'Deleted' event
 -- /Pre-release/
 --
 isDeleted :: Event -> Bool
@@ -156,6 +168,8 @@ isDeleted = Event.isDeleted
 -- monitored path. This event is generated when an object is renamed within the
 -- watched directory or if it is moved out of or in the watched directory.
 --
+-- Hard link behaviours:
+-- On Linux and Windows hard lnik move generates 'MovedFrom' and ' MovedTo' events
 -- /Pre-release/
 --
 isMoved :: Event -> Bool
@@ -163,6 +177,8 @@ isMoved = Event.isMoved
 
 -- | Determine whether the event indicates modification of an object within the
 -- monitored path. This event is generated only for files and not directories.
+-- Unlike Linux in Windows in recursive mode when a file is created or deleted the Modified
+-- event is generated for the parent directory as well.
 --
 -- /Pre-release/
 --
