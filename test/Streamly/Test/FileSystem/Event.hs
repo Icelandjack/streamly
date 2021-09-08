@@ -18,6 +18,7 @@ import Data.Maybe (fromJust)
 import Data.Word (Word8)
 import System.Directory
     ( createDirectoryIfMissing
+    , createDirectoryLink
     , removeFile
     , removeDirectory
     , removePathForcibly
@@ -125,6 +126,8 @@ rootPathRemovedEventCount :: Int
 rootPathRemovedEventCount = 3
 #else
 rootPathRemovedEventCount = 10
+eventListWithFixLenSymLink :: ToEventList
+eventListWithFixLenSymLink = S.toList . S.take 1
 #endif
 
 -------------------------------------------------------------------------------
@@ -181,19 +184,28 @@ driver ::
        , FilePath -> IO ()
        , FilePath -> IO ()
        , [String]
+       , Bool
        )
     -> SpecWith ()
-driver ec (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
+driver ec (desc, pre, ops, events, sym) = it desc $ runTest `shouldReturn` "PASS"
 
     where
 
     runTest = do
         sync <- newEmptyMVar
-        withSystemTempDirectory fseventDir $ \fp -> do
-            pre fp
-            let eventStream = checker ec fp sync events
-                fsOps = S.fromEffect $ runFSOps fp sync
-            fmap fromJust $ S.head $ eventStream `S.parallelFst` fsOps
+        withSystemTempDirectory fseventDir $ \fp ->
+            if sym
+            then do
+                  createDirectoryLink fp (fp  ++ "SymLink")
+                  pre (fp  ++ "SymLink")
+                  let eventStream = checker ec (fp  ++ "SymLink") sync events
+                      fsOps = S.fromEffect $ runFSOps (fp  ++ "SymLink") sync
+                  fmap fromJust $ S.head $ eventStream `S.parallelFst` fsOps
+            else do
+                  pre fp
+                  let eventStream = checker ec fp sync events
+                      fsOps = S.fromEffect $ runFSOps fp sync
+                  fmap fromJust $ S.head $ eventStream `S.parallelFst` fsOps
 
     runFSOps fp sync = do
         _ <- takeMVar sync
@@ -213,7 +225,8 @@ testDesc, testDescRootDir ::
     [ ( String                       -- test description
       , FilePath -> IO ()            -- pre test operation
       , FilePath -> IO ()            -- file system actions
-      , [String])                    -- expected events
+      , [String]                     -- expected events
+      , Bool )                       -- SymLink
     ]
 testDesc =
     [
@@ -225,6 +238,7 @@ testDesc =
 #elif defined(CABAL_OS_LINUX)
       , ["dir1Single_1073742080_Dir"]
 #endif
+      , False
       )
     , ( "Remove a single directory"
       , \fp -> createDirectoryIfMissing True (fp </> "dir1Single")
@@ -236,6 +250,7 @@ testDesc =
         "dir1Single_1073742336_Dir"
         ]
 #endif
+      , False
       )
     , ( "Rename a single directory"
       , \fp -> createDirectoryIfMissing True (fp </> "dir1Single")
@@ -252,6 +267,7 @@ testDesc =
         , "dir1SingleRenamed_1073741952_Dir"
         ]
 #endif
+      , False
       )
     , ( "Create a nested directory"
       , const (return ())
@@ -266,6 +282,7 @@ testDesc =
       , [ "dir1_1073742080_Dir"
         ]
 #endif
+      , False
       )
     , ( "Rename a nested directory"
       , \fp -> createDirectoryIfMissing True
@@ -285,6 +302,7 @@ testDesc =
         , "dir1/dir2/dir3Renamed_1073741952_Dir"
         ]
 #endif
+      , False
       )
     , ( "Create a file in root Dir"
       , const (return ())
@@ -299,6 +317,7 @@ testDesc =
         , "FileCreated.txt_2"
         ]
 #endif
+      , False
       )
     , ( "Remove a file in root Dir"
       , \fp -> writeFile (fp </> "FileCreated.txt") "Test Data"
@@ -308,6 +327,7 @@ testDesc =
 #elif defined(CABAL_OS_LINUX)
       , [ "FileCreated.txt_512" ]
 #endif
+      , False
       )
     , ( "Rename a file in root Dir"
       , \fp -> writeFile (fp </> "FileCreated.txt") "Test Data"
@@ -324,6 +344,7 @@ testDesc =
         , "FileRenamed.txt_128"
         ]
 #endif
+      , False
       )
     , ( "Create a file in a nested Dir"
       , \fp ->
@@ -340,6 +361,7 @@ testDesc =
         , "dir1/dir2/dir3/FileCreated.txt_2"
         ]
 #endif
+      , False
       )
     , ( "Remove a file in a nested Dir"
       , \fp ->
@@ -356,6 +378,7 @@ testDesc =
 #elif defined(CABAL_OS_LINUX)
       , ["dir1/dir2/dir3/FileCreated.txt_512"]
 #endif
+      , False
       )
     , ( "Rename a file in a nested Dir"
       , \fp ->
@@ -378,6 +401,7 @@ testDesc =
         , "dir1/dir2/dir3/FileRenamed.txt_128"
         ]
 #endif
+      , False
       )
     , ( "Remove the nested directory"
       , \fp ->
@@ -404,6 +428,7 @@ testDesc =
         , "dir1_1073742336_Dir"
         ]
 #endif
+      , False
       )
     ]
 
@@ -427,8 +452,28 @@ testDescRootDir =
       , "_1024"
     ]
 #endif
+      , False
      )
    ]
+
+#if defined(CABAL_OS_LINUX)
+testDescRootDirSymLink ::
+    [ ( String                       -- test description
+      , FilePath -> IO ()            -- pre test operation
+      , FilePath -> IO ()            -- file system actions
+      , [String]                     -- expected events
+      , Bool )                       -- SymLink
+    ]
+testDescRootDirSymLink =
+      [ ( "Remove the root directory as SymLink"
+      , \fp ->
+            createDirectoryIfMissing True (fp </> "dir1" </> "dir2")
+      , \fp -> removePathForcibly fp
+      , ["_1073741828_Dir"]
+      , True
+       )
+     ]
+#endif
 
 moduleName :: String
 moduleName = "FileSystem.Event"
@@ -442,6 +487,16 @@ main = do
       $ mapM_
       (driver $ checkEvents eventListWithEOtask Event.watchRecursive)
       testDesc
+    hspec
+      $ describe moduleName
+      $ mapM_
+      (driver $ checkEvents eventListWithEOtask CommonEvent.watchRecursive)
+      (map (\(a, b, c, d, _) -> (a, b, c, d, True)) testDesc)
+    hspec
+      $ describe moduleName
+      $ mapM_
+      (driver $ checkEvents eventListWithFixLenSymLink CommonEvent.watchRecursive)
+      testDescRootDirSymLink
 #endif
     hspec
       $ describe moduleName
