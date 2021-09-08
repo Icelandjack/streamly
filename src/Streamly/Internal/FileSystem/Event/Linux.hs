@@ -66,6 +66,7 @@ module Streamly.Internal.FileSystem.Event.Linux
       Config (..)
     , Toggle (..)
     , defaultConfig
+    , setRecursiveMode
 
     -- ** Watch Behavior
     , setFollowSymLinks
@@ -105,7 +106,7 @@ module Streamly.Internal.FileSystem.Event.Linux
     , watchRecursive
     , watchWith
     , watchWithFlags
-    , watchRecursiveWithFlags    
+    , watchRecursiveWithFlags
 
     -- Low level watch APIs
     , addToWatch
@@ -923,24 +924,24 @@ watch = watchWith (setRecursiveMode False)
 -- When a nested directory is deleted 'Deleted' events are generated
 -- for the nested content recursively.
 -- The nested directories are added into watch list for future events.
--- [flags] are used to filter the events with specific event flag. 
+-- [flags] are used to filter the events with specific event flag.
 --
 -- /Pre-release/
 --
-watchRecursiveWithFlags :: 
+watchRecursiveWithFlags ::
     [Word32] -> NonEmpty (Array Word8) -> SerialT IO Event
-watchRecursiveWithFlags flags = 
+watchRecursiveWithFlags flags =
     S.filter (\ev -> any (flip getFlag ev) flags) . watchRecursive
 
 -- | When a nested directory is created,
 -- Created event is generated only for the top directory.
--- [flags] are used to filter the events with specific event flag. 
+-- [flags] are used to filter the events with specific event flag.
 --
 -- /Pre-release/
 --
 watchWithFlags :: [Word32] -> NonEmpty (Array Word8) -> SerialT IO Event
-watchWithFlags flags = 
-    S.filter (\ev -> any (flip getFlag ev) flags) . watch   
+watchWithFlags flags =
+    S.filter (\ev -> any (flip getFlag ev) flags) . watch
 
 -------------------------------------------------------------------------------
 -- Examine event stream

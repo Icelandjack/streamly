@@ -109,7 +109,14 @@ watch :: NonEmpty (Array Word8) -> SerialT IO Event
 watch = Event.watch
 #elif defined(CABAL_OS_LINUX)
 watch = Event.watchWithFlags
-    [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+    [ 0x00000002    -- File was modified.
+    , 0x00000004    -- Metadata changed.
+    , 0x00000100    -- Subfile was created.
+    , 0x00000200    -- Subfile was deleted.
+    , 0x00000400    -- Root was deleted.
+    , 0x00000040    -- File was moved from X.
+    , 0x00000080    -- File was moved to Y.
+    ]
 #elif defined(CABAL_OS_DARWIN)
 watch = Event.watch
 #endif
@@ -126,7 +133,14 @@ watchRecursive :: NonEmpty (Array Word8) -> SerialT IO Event
 watchRecursive = Event.watchRecursive
 #elif defined(CABAL_OS_LINUX)
 watchRecursive = Event.watchRecursiveWithFlags
-    [0x00000002, 0x00000100, 0x00000200, 0x00000040, 0x00000080]
+    [ 0x00000002    -- File was modified.
+    , 0x00000004    -- Metadata changed.
+    , 0x00000100    -- Subfile was created.
+    , 0x00000200    -- Subfile was deleted.
+    , 0x00000400    -- Root was deleted.
+    , 0x00000040    -- File was moved from X.
+    , 0x00000080    -- File was moved to Y.
+    ]
 #elif defined(CABAL_OS_DARWIN)
 watchRecursive = Event.watchRecursive
 #endif
@@ -161,6 +175,17 @@ isCreated = Event.isCreated
 -- monitored path. This is true when a file or a hardlink is deleted.--
 -- Hard link behaviours:
 -- On Linux and Windows hard lnik deletion generates 'Deleted' event
+-- @
+-- Deletion of Root path:
+--
+-- In 'Linux' the deletion of root path only generates 'RootDeleted' event for
+-- the root path, whereas the nested directory inside the root path gets
+-- 'Deleted' and 'RootDeleted' events.
+--
+-- In Windows from GUI the deletion of root path is not allowed , from CLI the
+-- content inside the root path is deleted and 'Deleted' event is generated
+-- for each nested paths.There is no event generated for root path itself.
+-- @
 -- /Pre-release/
 --
 isDeleted :: Event -> Bool

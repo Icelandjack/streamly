@@ -76,11 +76,7 @@ eoTask = "EOTask"
 -- XXX Make the getRelPath type same on windows and other platforms
 eventPredicate :: Event.Event -> Bool
 eventPredicate ev =
-#if defined(CABAL_OS_WINDOWS)
     if (utf8ToString $ Event.getRelPath ev) == eoTask
-#else
-    if (utf8ToString $ Event.getRelPath ev) == eoTask
-#endif
     then False
     else True
 
@@ -124,20 +120,34 @@ showEventShort ev@Event.Event{..} =
 #error "Unsupported OS"
 #endif
 
+rootPathRemovedEventCount :: Int
+#if defined(CABAL_OS_WINDOWS)
+rootPathRemovedEventCount = 3
+#else
+rootPathRemovedEventCount = 10
+#endif
+
 -------------------------------------------------------------------------------
 -- Event Watcher
 -------------------------------------------------------------------------------
 
 type EventChecker = FilePath -> MVar () -> [String] -> IO String
 type EventWatch = NonEmpty (Array Word8) -> S.SerialT IO Event.Event
+type ToEventList = S.SerialT IO Event.Event -> IO [Event.Event]
 
-checkEvents :: EventWatch -> EventChecker 
-checkEvents ew rootPath m matchList = do
+eventListWithFixLen :: ToEventList
+eventListWithFixLen = S.toList . S.take rootPathRemovedEventCount
+
+eventListWithEOtask :: ToEventList
+eventListWithEOtask = S.parse (PR.takeWhile eventPredicate FL.toList)
+
+checkEvents :: ToEventList -> EventWatch -> EventChecker
+checkEvents toEL ew rootPath m matchList = do
     let args = [rootPath]
     paths <- mapM toUtf8 args
     putStrLn ("Watch started !!!! on Path " ++ rootPath)
-    events <- S.parse (PR.takeWhile eventPredicate FL.toList)
-        $ S.before (putMVar m ())        
+    events <- toEL
+        $ S.before (putMVar m ())
         $ ew (NonEmpty.fromList paths)
     let eventStr =  map showEventShort events
     let baseSet = Set.fromList matchList
@@ -149,7 +159,7 @@ checkEvents ew rootPath m matchList = do
         putStrLn $ "baseSet " ++ show matchList
         putStrLn $ "resultSet " ++ show eventStr
         return "Mismatch"
-        
+
 -------------------------------------------------------------------------------
 -- FS Event Generators
 -------------------------------------------------------------------------------
@@ -199,7 +209,7 @@ driver ec (desc, pre, ops, events) = it desc $ runTest `shouldReturn` "PASS"
 -- Main
 -------------------------------------------------------------------------------
 
-testDesc ::
+testDesc, testDescRootDir ::
     [ ( String                       -- test description
       , FilePath -> IO ()            -- pre test operation
       , FilePath -> IO ()            -- file system actions
@@ -254,23 +264,6 @@ testDesc =
         ]
 #elif defined(CABAL_OS_LINUX)
       , [ "dir1_1073742080_Dir"
-        ]
-#endif
-      )
-    , ( "Remove a nested directory"
-      , \fp ->
-            createDirectoryIfMissing True (fp </> "dir1" </> "dir2" </> "dir3")
-      , \fp -> removePathForcibly (fp </> "dir1")
-#if defined(CABAL_OS_WINDOWS)
-      , [ "dir1_3"
-        , "dir1\\dir2_3"
-        , "dir1\\dir2\\dir3_2"
-        , "dir1\\dir2_2","dir1_2"
-        ]
-#elif defined(CABAL_OS_LINUX)
-      , [ "dir1/dir2/dir3_1073742336_Dir"
-        , "dir1/dir2_1073742336_Dir"
-        , "dir1_1073742336_Dir"
         ]
 #endif
       )
@@ -386,7 +379,56 @@ testDesc =
         ]
 #endif
       )
+    , ( "Remove the nested directory"
+      , \fp ->
+            createDirectoryIfMissing True (fp </> "dir1" </> "dir2" </> "dir3")
+      , \fp -> removePathForcibly (fp </> "dir1")
+#if defined(CABAL_OS_WINDOWS)
+      , [ "dir1_3"
+        , "dir1\\dir2_3"
+        , "dir1\\dir2\\dir3_2"
+        , "dir1\\dir2_2","dir1_2"
+        ]
+#elif defined(CABAL_OS_LINUX)
+      , [ "dir1_1073741828_Dir"
+        , "dir1_1073741828_Dir"
+        , "dir1/dir2_1073741828_Dir"
+        , "dir1/dir2_1073741828_Dir"
+        , "dir1/dir2/dir3_1073741828_Dir"
+        , "dir1/dir2/dir3_1073741828_Dir"
+        , "dir1/dir2/dir3_1024"
+        , "dir1/dir2/dir3_1073742336_Dir"
+        , "dir1/dir2_1024"
+        , "dir1/dir2_1073742336_Dir"
+        , "dir1_1024"
+        , "dir1_1073742336_Dir"
+        ]
+#endif
+      )
     ]
+
+testDescRootDir =
+    [ ( "Remove the root directory"
+    , \fp ->
+          createDirectoryIfMissing True (fp </> "dir1" </> "dir2")
+    , \fp -> removePathForcibly fp
+#if defined(CABAL_OS_WINDOWS)
+    , ["dir1_2", "dir1_3", "dir1\\dir2_2"]
+#elif defined(CABAL_OS_LINUX)
+    , [ "_1073741828_Dir"
+      , "dir1_1073741828_Dir"
+      , "dir1_1073741828_Dir"
+      , "dir1/dir2_1073741828_Dir"
+      , "dir1/dir2_1073741828_Dir"
+      , "dir1/dir2_1024"
+      , "dir1/dir2_1073742336_Dir"
+      , "dir1_1024"
+      , "dir1_1073742336_Dir"
+      , "_1024"
+    ]
+#endif
+     )
+   ]
 
 moduleName :: String
 moduleName = "FileSystem.Event"
@@ -394,5 +436,20 @@ moduleName = "FileSystem.Event"
 main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
-    hspec $ describe moduleName $ mapM_ (driver $ checkEvents Event.watchRecursive) testDesc
-    hspec $ describe moduleName $ mapM_ (driver $ checkEvents CommonEvent.watchRecursive) testDesc
+#if defined(CABAL_OS_LINUX)
+    hspec
+      $ describe moduleName
+      $ mapM_
+      (driver $ checkEvents eventListWithEOtask Event.watchRecursive)
+      testDesc
+#endif
+    hspec
+      $ describe moduleName
+      $ mapM_
+      (driver $ checkEvents eventListWithEOtask CommonEvent.watchRecursive)
+      testDesc
+    hspec
+      $ describe moduleName
+      $ mapM_
+      (driver $ checkEvents eventListWithFixLen CommonEvent.watchRecursive)
+      testDescRootDir
