@@ -26,8 +26,12 @@ import Streamly.Internal.Control.Concurrent (MonadAsync)
 import Streamly.Internal.Data.Tuple.Strict (Tuple3'(..))
 
 import Streamly.Internal.Data.Fold.Type
-import Prelude hiding (concatMap, filter, foldr, map, take)
 
+-- $setup
+-- >>> :m
+-- >>> import qualified Streamly.Prelude as Stream
+-- >>> import qualified Streamly.Data.Fold as Fold
+-- >>> import qualified Streamly.Internal.Data.Fold.Async as Fold
 
 -- XXX We can use asyncClock here. A parser can be used to return an input that
 -- arrives after the timeout.
@@ -38,7 +42,8 @@ import Prelude hiding (concatMap, filter, foldr, map, take)
 -- | @takeInterval n fold@ uses @fold@ to fold the input items arriving within
 -- a window of first @n@ seconds.
 --
--- >>> Stream.fold (Fold.takeInterval 1.0 Fold.toList) $ Stream.delay 0.1 $ Stream.fromList [1..]
+-- >>> input = Stream.delay 0.1 $ Stream.fromList [1..]
+-- >>> Stream.fold (Fold.takeInterval 1.0 Fold.toList) input
 -- [1,2,3,4,5,6,7,8,9,10,11]
 --
 -- Stops when @fold@ stops or when the timeout occurs. Note that the fold needs

@@ -815,7 +815,7 @@ MONAD_COMMON_INSTANCES(AsyncT, MONADPARALLEL)
 
 {-# INLINE wAsyncK #-}
 wAsyncK :: MonadAsync m => Stream m a -> Stream m a -> Stream m a
-wAsyncK = joinStreamVarAsync AsyncVar
+wAsyncK = joinStreamVarAsync WAsyncVar
 
 -- | XXX we can implement it more efficienty by directly implementing instead
 -- of combining streams using wAsync.

@@ -106,9 +106,6 @@ import Prelude hiding
     (map, mapM, concatMap, foldr, repeat, null, reverse, tail, init)
 import qualified Prelude
 
--- $setup
--- >>> import Streamly.Prelude as Stream
-
 ------------------------------------------------------------------------------
 -- Basic stream type
 ------------------------------------------------------------------------------
@@ -744,17 +741,6 @@ infixr 6 `serial`
 -- | Appends two streams sequentially, yielding all elements from the first
 -- stream, and then all elements from the second stream.
 --
--- >>> import Streamly.Prelude (serial)
--- >>> stream1 = Stream.fromList [1,2]
--- >>> stream2 = Stream.fromList [3,4]
--- >>> Stream.toList $ stream1 `serial` stream2
--- [1,2,3,4]
---
--- This operation can be used to fold an infinite lazy container of streams.
---
--- /Since: 0.2.0 ("Streamly")/
---
--- @since 0.8.0
 {-# INLINE serial #-}
 serial :: Stream m a -> Stream m a -> Stream m a
 -- XXX This doubles the time of toNullAp benchmark, may not be fusing properly

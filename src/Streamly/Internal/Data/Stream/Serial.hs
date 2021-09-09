@@ -297,7 +297,7 @@ TRAVERSABLE_INSTANCE(SerialT)
 -- @2@:
 --
 -- >>> import Streamly.Prelude (wSerial)
--- >>> Stream.toList $ Stream.fromList [(1,3),(1,4)] `wSerial` Stream.fromList [(2,3),(2,4)]
+-- >>> Stream.toList $ Stream.fromList [(1,3),(1,4)] `Stream.wSerial` Stream.fromList [(2,3),(2,4)]
 -- [(1,3),(2,3),(1,4),(2,4)]
 --
 -- The @W@ in the name stands for @wide@ or breadth wise scheduling in
@@ -351,22 +351,6 @@ wSerialK m1 m2 = mkStream $ \st yld sng stp -> do
 -- | Interleaves two streams, yielding one element from each stream
 -- alternately.  When one stream stops the rest of the other stream is used in
 -- the output stream.
---
--- >>> import Streamly.Prelude (wSerial)
--- >>> stream1 = Stream.fromList [1,2]
--- >>> stream2 = Stream.fromList [3,4]
--- >>> Stream.toList $ Stream.fromWSerial $ stream1 `wSerial` stream2
--- [1,3,2,4]
---
--- Note, for singleton streams 'wSerial' and 'serial' are identical.
---
--- Note that this operation cannot be used to fold a container of infinite
--- streams but it can be used for very large streams as the state that it needs
--- to maintain is proportional to the logarithm of the number of streams.
---
--- @since 0.8.0
---
--- /Since: 0.2.0 ("Streamly")/
 
 -- Scheduling Notes:
 --

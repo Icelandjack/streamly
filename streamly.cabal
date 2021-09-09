@@ -264,6 +264,7 @@ common default-extensions
         RecordWildCards
         ScopedTypeVariables
         TupleSections
+        TypeApplications
         TypeFamilies
         ViewPatterns
 
@@ -302,8 +303,6 @@ common lib-options
 library
     import: lib-options
 
-    if impl(ghc >= 8.1)
-      default-extensions: TypeApplications
     if impl(ghc >= 8.6)
       default-extensions: QuantifiedConstraints
 

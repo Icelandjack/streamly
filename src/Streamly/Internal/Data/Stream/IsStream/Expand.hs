@@ -186,15 +186,23 @@ import Prelude hiding (concat, concatMap, zipWith)
 
 -- $setup
 -- >>> :m
+-- >>> import Control.Concurrent (threadDelay)
 -- >>> import Data.IORef
 -- >>> import Prelude hiding (zipWith, concatMap, concat)
 -- >>> import qualified Streamly.Prelude as Stream
--- >>> import Streamly.Internal.Data.Stream.IsStream as Stream
+-- >>> import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 -- >>> import qualified Streamly.Data.Fold as Fold
 -- >>> import qualified Streamly.Internal.Data.Fold as Fold
 -- >>> import qualified Streamly.Internal.Data.Unfold as Unfold
 -- >>> import qualified Streamly.Internal.Data.Parser as Parser
 -- >>> import qualified Streamly.Data.Array.Foreign as Array
+-- >>> :{
+--  delay n = do
+--      threadDelay (n * 1000000)   -- sleep for n seconds
+--      putStrLn (show n ++ " sec") -- print "n sec"
+--      return n                    -- IO Int
+-- :}
+--
 
 -------------------------------------------------------------------------------
 -- Appending
@@ -496,7 +504,7 @@ infixr 6 `wAsync`
 -- With a single thread, 'async' starts behaving like 'serial' while 'wAsync'
 -- starts behaving like 'wSerial'.
 --
--- >>> import Streamly.Prelude (wAsync)
+-- >>> import Streamly.Prelude (async, wAsync)
 -- >>> stream1 = Stream.fromList [1,2,3]
 -- >>> stream2 = Stream.fromList [4,5,6]
 -- >>> Stream.toList $ Stream.fromAsync $ Stream.maxThreads 1 $ stream1 `async` stream2
