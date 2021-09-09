@@ -1,3 +1,4 @@
+src/Streamly/Internal/Data/Stream/Prelude.hs
 src/Streamly/Internal/Data/Stream/PreludeCommon.hs
 src/Streamly/Internal/Data/Stream/SVar.hs
 src/Streamly/Internal/Data/Stream/Serial.hs
