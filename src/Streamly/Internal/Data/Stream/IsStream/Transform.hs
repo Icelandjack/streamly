@@ -886,7 +886,7 @@ filter :: (IsStream t, Monad m) => (a -> Bool) -> t m a -> t m a
 filter p m = fromStreamS $ S.filter p $ toStreamS m
 #else
 filter :: IsStream t => (a -> Bool) -> t m a -> t m a
-filter = K.filter
+filter p m = fromStream $ K.filter p $ toStream m
 #endif
 
 -- | Same as 'filter' but with a monadic predicate.
